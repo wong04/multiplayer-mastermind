@@ -61,6 +61,17 @@
 							<button id="btn-join" class="btn">Join room</button>
 						</div>
 					</div>
+
+					<div class="solo">
+						<h3>Play solo</h3>
+						<small class="muted">Crack a code the computer picks — just you.</small>
+						<div class="difficulty">
+							<button class="diff-btn" data-diff="easy">Easy</button>
+							<button class="diff-btn selected" data-diff="normal">Normal</button>
+							<button class="diff-btn" data-diff="hard">Hard</button>
+						</div>
+						<button id="btn-solo" class="btn btn--primary">Play solo</button>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -79,6 +90,7 @@
 					</div>
 
 					<p class="muted">Mode: <strong id="lobby-mode-label">Classic</strong></p>
+					<p class="muted">Players: <strong id="lobby-count">1/4</strong></p>
 					<ul id="lobby-players" class="players"></ul>
 
 					<div id="host-controls" class="host-controls hidden">
@@ -98,6 +110,7 @@
 						<p class="hint" id="start-hint"></p>
 					</div>
 					<p id="lobby-wait" class="muted hidden">Waiting for the host to start…</p>
+					<button id="btn-leave-lobby" class="btn btn--ghost btn--sm">Leave room</button>
 				</div>
 			</div>
 		</section>

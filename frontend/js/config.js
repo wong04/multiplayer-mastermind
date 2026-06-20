@@ -12,6 +12,16 @@ function backendWsUrl() {
 	return PROD_WS_URL;
 }
 
+// Mirrors MAX_PLAYERS on the server (rooms.py) for lobby capacity display.
+const MAX_PLAYERS = 4;
+
+// Solo difficulty presets sent as the room config when starting a solo game.
+const DIFFICULTIES = {
+	easy: { code_length: 4, n_colors: 6, max_guesses: 12 },
+	normal: { code_length: 4, n_colors: 6, max_guesses: 10 },
+	hard: { code_length: 5, n_colors: 8, max_guesses: 10 },
+};
+
 // Palette: distinct hues, each paired with a symbol so colorblind players can
 // still tell them apart. Supports configs up to 10 colors.
 const PALETTE = [

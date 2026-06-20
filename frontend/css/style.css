@@ -283,6 +283,33 @@ input:focus {
 .radio small { color: var(--muted); }
 .radio strong { font-family: 'Press Start 2P', monospace; font-size: 0.7rem; color: var(--green); }
 
+/* ---- Solo ---- */
+.solo {
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 2px solid var(--green-dim);
+}
+.solo h3 { margin-bottom: 4px; }
+.difficulty { display: flex; gap: 8px; margin: 10px 0; }
+.diff-btn {
+	flex: 1; padding: 10px;
+	border-top:   2px solid var(--bv-lt);
+	border-left:  2px solid var(--bv-lt);
+	border-right: 2px solid var(--bv-dk);
+	border-bottom:2px solid var(--bv-dk);
+	background: var(--bg-2);
+	color: var(--muted);
+	font-family: 'Press Start 2P', monospace;
+	font-size: 0.65rem;
+	cursor: pointer;
+}
+.diff-btn.selected {
+	background: var(--green-dk);
+	color: var(--green);
+	border-top-color: var(--green);
+	border-left-color: var(--green);
+}
+
 /* ---- Lobby ---- */
 .room-head {
 	display: flex;

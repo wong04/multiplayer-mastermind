@@ -22,6 +22,7 @@ from . import game
 from .rooms import (
 	MODE_CLASSIC,
 	MODE_COMPETITION,
+	MODE_SOLO,
 	STATE_GAME_OVER,
 	STATE_IN_ROUND,
 	STATE_ROUND_OVER,
@@ -93,8 +94,8 @@ class ClassicRound:
 
 
 def start_classic_round(room: Room) -> ClassicRound:
-	"""Begin a classic round, rotating the codemaker to the next player."""
-	order = room.player_order()
+	"""Begin a classic round, rotating the codemaker to the next connected player."""
+	order = room.connected_players()
 	if len(order) < 2:
 		raise GameError("Need at least 2 players")
 	codemaker = order[room.codemaker_turn % len(order)]
@@ -216,8 +217,19 @@ class CompetitionRound:
 
 
 def start_competition_round(room: Room) -> CompetitionRound:
-	if len(room.player_order()) < 2:
+	if len(room.connected_players()) < 2:
 		raise GameError("Need at least 2 players")
+	return _start_server_secret_round(room)
+
+
+def start_solo_round(room: Room) -> CompetitionRound:
+	"""Begin a single-player round against a server-generated secret."""
+	if len(room.connected_players()) < 1:
+		raise GameError("Need at least 1 player")
+	return _start_server_secret_round(room)
+
+
+def _start_server_secret_round(room: Room) -> CompetitionRound:
 	secret = game.generate_secret(room.config.code_length, room.config.n_colors)
 	rnd = CompetitionRound(secret=secret)
 	room.round = rnd
@@ -307,11 +319,20 @@ def start_round(room: Room):
 		return start_classic_round(room)
 	if room.mode == MODE_COMPETITION:
 		return start_competition_round(room)
+	if room.mode == MODE_SOLO:
+		return start_solo_round(room)
 	raise GameError(f"Unknown mode: {room.mode}")
 
 
 def finish_round(room: Room) -> Player | None:
-	"""Mark the round over and return the match winner if the target score is reached."""
+	"""Mark the round over and return the match winner if the target score is reached.
+
+	Solo has no match target: it always returns to `round_over` so the player can
+	keep dealing fresh codes via `next_round`.
+	"""
+	if room.mode == MODE_SOLO:
+		room.state = STATE_ROUND_OVER
+		return None
 	match_winner = room.winner_by_score()
 	room.state = STATE_GAME_OVER if match_winner else STATE_ROUND_OVER
 	return match_winner

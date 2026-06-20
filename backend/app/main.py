@@ -15,6 +15,7 @@ from . import modes, protocol as p
 from .modes import ClassicRound, CompetitionRound, GameError
 from .rooms import (
 	MIN_PLAYERS,
+	MODE_SOLO,
 	STATE_GAME_OVER,
 	STATE_IN_ROUND,
 	STATE_LOBBY,
@@ -178,9 +179,18 @@ async def handle_create_room(msg: dict, ws: WebSocket, session: Session) -> None
 	mode = msg.get("mode", "classic")
 	if mode not in VALID_MODES:
 		raise RoomError(f"Unknown mode: {mode}")
-	room, player = registry.create_room(msg.get("nickname", ""), mode=mode)
+	nickname = msg.get("nickname", "")
+	if mode == MODE_SOLO and not nickname.strip():
+		nickname = "Player"
+	room, player = registry.create_room(nickname, mode=mode)
 	_bind(session, room, player, ws)
 	await _send_joined(room, player)
+	if mode == MODE_SOLO:
+		# Solo skips the lobby: apply any chosen difficulty and start immediately.
+		_apply_config(room, msg.get("config") or {})
+		modes.start_round(room)
+		await broadcast_round_start(room)
+		return
 	await broadcast_lobby(room)
 
 
@@ -217,12 +227,16 @@ async def handle_set_mode(msg: dict, ws: WebSocket, session: Session) -> None:
 
 async def handle_set_config(msg: dict, ws: WebSocket, session: Session) -> None:
 	room, player = _require_host_in_lobby(session)
-	cfg = room.config
-	cfg.code_length = _clamp(msg.get("code_length", cfg.code_length), 2, 8)
-	cfg.n_colors = _clamp(msg.get("n_colors", cfg.n_colors), 2, 10)
-	cfg.max_guesses = _clamp(msg.get("max_guesses", cfg.max_guesses), 1, 20)
-	cfg.target_score = _clamp(msg.get("target_score", cfg.target_score), 1, 20)
+	_apply_config(room, msg)
 	await broadcast_lobby(room)
+
+
+def _apply_config(room: Room, cfg_msg: dict) -> None:
+	cfg = room.config
+	cfg.code_length = _clamp(cfg_msg.get("code_length", cfg.code_length), 2, 8)
+	cfg.n_colors = _clamp(cfg_msg.get("n_colors", cfg.n_colors), 2, 10)
+	cfg.max_guesses = _clamp(cfg_msg.get("max_guesses", cfg.max_guesses), 1, 20)
+	cfg.target_score = _clamp(cfg_msg.get("target_score", cfg.target_score), 1, 20)
 
 
 async def handle_start_game(msg: dict, ws: WebSocket, session: Session) -> None:
@@ -291,7 +305,10 @@ async def handle_restart_round(msg: dict, ws: WebSocket, session: Session) -> No
 	room, player = _require_host(session)
 	if room.state != STATE_IN_ROUND:
 		raise GameError("No round in progress to restart")
+	# Replay the same round: undo the counters start_round will re-apply so the
+	# classic codemaker stays the same player rather than rotating on.
 	room.round_no -= 1
+	room.codemaker_turn = max(0, room.codemaker_turn - 1)
 	room.round = None
 	modes.start_round(room)
 	await broadcast_round_start(room)

@@ -4,6 +4,7 @@ from app import modes
 from app.rooms import (
 	MODE_CLASSIC,
 	MODE_COMPETITION,
+	MODE_SOLO,
 	STATE_GAME_OVER,
 	STATE_ROUND_OVER,
 	RoomRegistry,
@@ -79,6 +80,41 @@ class TestClassic:
 		assert out["reason"] == "unbroken"
 		assert codemaker.score == 1
 		assert breaker.score == 0
+
+	def test_codemaker_skips_disconnected_player(self):
+		room, players = make_room(MODE_CLASSIC, n_players=3)
+		# The next player up for codemaker (index 0) is offline.
+		players[0].connected = False
+		rnd = modes.start_classic_round(room)
+		assert rnd.codemaker_id != players[0].id
+		assert room.players[rnd.codemaker_id].connected is True
+
+
+# ---------------------------------------------------------------------------
+# Solo
+# ---------------------------------------------------------------------------
+
+
+class TestSolo:
+	def test_solo_round_starts_with_one_player(self):
+		reg = RoomRegistry()
+		room, host = reg.create_room("solo", mode=MODE_SOLO)
+		rnd = modes.start_round(room)
+		assert isinstance(rnd, modes.CompetitionRound)
+		assert rnd.secret is not None
+		assert len(rnd.secret) == room.config.code_length
+
+	def test_solo_winning_guess_resolves_in_one_barrier(self):
+		reg = RoomRegistry()
+		room, host = reg.create_room("solo", mode=MODE_SOLO)
+		rnd = modes.start_round(room)
+		assert modes.competition_barrier_ready(room) is False
+		modes.submit_competition_guess(room, host.id, list(rnd.secret))
+		assert modes.competition_barrier_ready(room) is True
+		out = modes.resolve_competition_barrier(room)
+		assert out["round_over"] is True
+		assert out["winner_id"] == host.id
+		assert host.score == 1
 
 
 # ---------------------------------------------------------------------------

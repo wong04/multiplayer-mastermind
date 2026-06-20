@@ -97,3 +97,48 @@ def test_classic_codemaker_sets_secret_then_breaker_cracks():
 		assert fb["result"]["black"] == 4
 		over = recv_until(br_ws, p.ROUND_OVER)
 		assert over["reason"] == "cracked"
+
+
+def test_solo_skips_lobby_and_auto_starts():
+	client = TestClient(app)
+	with client.websocket_connect("/ws") as solo:
+		solo.send_json({
+			"type": p.CREATE_ROOM,
+			"nickname": "",
+			"mode": "solo",
+			"config": {"code_length": 5, "n_colors": 8, "max_guesses": 7},
+		})
+		joined = recv_until(solo, p.ROOM_JOINED)
+		# No lobby — a round starts immediately with the chosen difficulty.
+		rs = recv_until(solo, p.ROUND_START)
+		assert rs["config"]["code_length"] == 5
+		assert rs["config"]["n_colors"] == 8
+		assert rs["config"]["max_guesses"] == 7
+
+		room = registry.get(joined["room_code"])
+		secret = list(room.round.secret)
+		solo.send_json({"type": p.SUBMIT_GUESS, "guess": secret})
+		recv_until(solo, p.GUESS_FEEDBACK)
+		over = recv_until(solo, p.ROUND_OVER)
+		assert over["reason"] == "cracked"
+
+
+def test_restart_round_keeps_same_classic_codemaker():
+	client = TestClient(app)
+	with client.websocket_connect("/ws") as host, client.websocket_connect("/ws") as guest:
+		hj = create(host, "alice", mode="classic")
+		code = hj["room_code"]
+		join(guest, code, "bob")
+
+		host.send_json({"type": p.START_GAME})
+		recv_until(host, p.ROUND_START)
+		recv_until(guest, p.ROUND_START)
+
+		room = registry.get(code)
+		first_codemaker = room.round.codemaker_id
+
+		host.send_json({"type": p.RESTART_ROUND})
+		recv_until(host, p.ROUND_START)
+		recv_until(guest, p.ROUND_START)
+
+		assert room.round.codemaker_id == first_codemaker

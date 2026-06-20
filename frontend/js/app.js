@@ -2,6 +2,8 @@
 
 const SESSION_KEY = "mastermind_session";
 
+const MODE_LABELS = { classic: "Classic", competition: "Competition", solo: "Solo" };
+
 const S = {
 	playerId: null,
 	playerToken: null,
@@ -85,6 +87,7 @@ socket.on("lobby_update", (m) => {
 	S.hostId = m.host_id;
 	S.mode = m.mode;
 	S.config = m.config;
+	announcePresenceChanges(S.players, m.players);
 	S.players = m.players;
 	if (m.state === "lobby") {
 		S.round = null;
@@ -92,8 +95,29 @@ socket.on("lobby_update", (m) => {
 		showScreen("lobby");
 	} else {
 		renderScoreboards();
+		// A disconnect may have promoted us to host while a round/results show.
+		if (m.state === "round_over" || m.state === "game_over") {
+			reconcileOverControls(m.state === "game_over");
+		}
 	}
 });
+
+// Toast when players join, leave, or drop, by diffing the roster.
+function announcePresenceChanges(prev, next) {
+	if (!prev || !prev.length) return;
+	const prevById = new Map(prev.map((p) => [p.id, p]));
+	const nextById = new Map(next.map((p) => [p.id, p]));
+	for (const p of next) {
+		if (p.id === S.playerId) continue;
+		const before = prevById.get(p.id);
+		if (!before) toast(`${p.nickname} joined`, "info");
+		else if (before.connected && !p.connected) toast(`${p.nickname} disconnected`, "info");
+		else if (!before.connected && p.connected) toast(`${p.nickname} reconnected`, "info");
+	}
+	for (const p of prev) {
+		if (p.id !== S.playerId && !nextById.has(p.id)) toast(`${p.nickname} left`, "info");
+	}
+}
 
 socket.on("round_start", (m) => {
 	S.mode = m.mode;
@@ -120,14 +144,15 @@ socket.on("guess_feedback", (m) => {
 	if (!S.round) return;
 	S.round.board = m.board;
 	renderHistory($("history"), S.round.board, S.config.code_length);
-	if (S.mode === "competition") {
+	if (S.mode === "competition" || S.mode === "solo") {
 		// Barrier resolved: a new guess round begins (unless round_over follows).
 		S.round.alreadySubmitted = false;
 		if (S.editor) {
 			S.editor.reset();
 			S.editor.setEnabled(true);
 		}
-		setStatus("");
+		if (S.mode === "solo") updateSoloStatus();
+		else setStatus("");
 	} else if (!m.result.solved && S.editor) {
 		S.editor.reset();
 		S.editor.setEnabled(true);
@@ -178,6 +203,21 @@ $("btn-join").addEventListener("click", () => {
 	socket.send({ type: "join_room", nickname, room_code: code });
 });
 
+let soloDifficulty = "normal";
+for (const btn of document.querySelectorAll(".diff-btn")) {
+	btn.addEventListener("click", () => {
+		soloDifficulty = btn.dataset.diff;
+		for (const b of document.querySelectorAll(".diff-btn")) {
+			b.classList.toggle("selected", b === btn);
+		}
+	});
+}
+
+$("btn-solo").addEventListener("click", () => {
+	const nickname = $("nickname").value.trim() || "Player";
+	socket.send({ type: "create_room", mode: "solo", nickname, config: DIFFICULTIES[soloDifficulty] });
+});
+
 // -- lobby -----------------------------------------------------------------
 
 function renderLobby() {
@@ -193,6 +233,7 @@ function renderLobby() {
 	}
 
 	$("lobby-mode-label").textContent = S.mode === "classic" ? "Classic" : "Competition";
+	$("lobby-count").textContent = `${S.players.length}/${MAX_PLAYERS}`;
 	const host = isHost();
 	$("host-controls").classList.toggle("hidden", !host);
 	$("lobby-wait").classList.toggle("hidden", host);
@@ -205,8 +246,11 @@ function renderLobby() {
 		$("cfg-colors").value = S.config.n_colors;
 		$("cfg-guesses").value = S.config.max_guesses;
 		$("cfg-target").value = S.config.target_score;
-		$("btn-start").disabled = S.players.length < 2;
-		$("start-hint").textContent = S.players.length < 2 ? "Need at least 2 players" : "";
+		const short = S.players.length < 2;
+		$("btn-start").disabled = short;
+		$("start-hint").textContent = short
+			? `Need ${2 - S.players.length} more player${2 - S.players.length === 1 ? "" : "s"}`
+			: "Ready — start when everyone's in.";
 	}
 }
 
@@ -229,7 +273,12 @@ $("btn-start").addEventListener("click", () => socket.send({ type: "start_game" 
 
 $("btn-copy-code").addEventListener("click", () => {
 	navigator.clipboard?.writeText(S.roomCode);
-	toast("Room code copied", "info");
+	toast(`Copied ${S.roomCode}`, "info");
+});
+
+$("btn-leave-lobby").addEventListener("click", () => {
+	clearSession();
+	location.reload();
 });
 
 // -- game ------------------------------------------------------------------
@@ -254,8 +303,8 @@ function renderScoreboards() {
 function renderGame() {
 	renderScoreboards();
 	const r = S.round;
-	$("round-no").textContent = `Round ${r.roundNo}`;
-	$("game-mode").textContent = r.mode === "classic" ? "Classic" : "Competition";
+	$("round-no").textContent = r.mode === "solo" ? `Game ${r.roundNo}` : `Round ${r.roundNo}`;
+	$("game-mode").textContent = MODE_LABELS[r.mode] || "Classic";
 
 	const area = $("game-area");
 	area.innerHTML = gameAreaTemplate();
@@ -314,7 +363,9 @@ function renderBreaker() {
 		(guess) => submitGuess(guess),
 	);
 
-	if (r.mode === "competition") {
+	if (r.mode === "solo") {
+		updateSoloStatus();
+	} else if (r.mode === "competition") {
 		if (r.alreadySubmitted) {
 			S.editor.setEnabled(false);
 			setStatus("");
@@ -323,6 +374,13 @@ function renderBreaker() {
 	} else {
 		setStatus("Crack the code! First to guess it wins the round.");
 	}
+}
+
+function updateSoloStatus() {
+	if (!S.round) return;
+	const used = S.round.board.length;
+	const left = S.config.max_guesses - used;
+	setStatus(`Guess ${used + 1} of ${S.config.max_guesses} · ${left} left`);
 }
 
 function submitGuess(guess) {
@@ -349,14 +407,15 @@ function renderOver(m, isGameOver) {
 	renderScoreboards();
 	const title = $("over-title");
 	const sub = $("over-secret");
+	sub.textContent = "";
 
-	if (isGameOver) {
+	if (S.mode === "solo") {
+		renderSoloOver(m, title, sub);
+	} else if (isGameOver) {
 		const champ = nameOf(m.winner_id);
 		title.textContent = m.winner_id === S.playerId ? "🏆 You won the match!" : `🏆 ${champ} wins the match!`;
-		sub.textContent = "";
 	} else if (m.reason === "aborted") {
 		title.textContent = "Round aborted (a player left)";
-		sub.textContent = "";
 	} else if (!m.winner_id) {
 		title.textContent = "Nobody cracked it!";
 		sub.appendChild(secretReveal(m.secret));
@@ -369,7 +428,34 @@ function renderOver(m, isGameOver) {
 		}
 	}
 
+	reconcileOverControls(isGameOver);
+}
+
+function renderSoloOver(m, title, sub) {
+	if (m.winner_id === S.playerId) {
+		const guesses = S.round ? S.round.board.length : 0;
+		title.textContent = `🏆 You cracked it in ${guesses} guess${guesses === 1 ? "" : "es"}!`;
+	} else {
+		title.textContent = "Out of guesses!";
+		if (m.secret) {
+			sub.innerHTML = "The code was: ";
+			sub.appendChild(secretReveal(m.secret));
+		}
+	}
+}
+
+// Show the right host actions on the results screen. Solo always offers a fresh
+// game; multiplayer gates Next round / Rematch behind being the host.
+function reconcileOverControls(isGameOver) {
+	if (S.mode === "solo") {
+		$("btn-next-round").textContent = "Play again";
+		$("btn-next-round").classList.remove("hidden");
+		$("btn-rematch").classList.add("hidden");
+		$("over-wait").classList.add("hidden");
+		return;
+	}
 	const host = isHost();
+	$("btn-next-round").textContent = "Next round";
 	$("btn-next-round").classList.toggle("hidden", isGameOver || !host);
 	$("btn-rematch").classList.toggle("hidden", !isGameOver || !host);
 	$("over-wait").classList.toggle("hidden", host);
