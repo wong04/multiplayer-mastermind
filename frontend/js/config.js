@@ -2,7 +2,7 @@
 //
 // Local dev points at the FastAPI server on :8000. In production, set
 // PROD_WS_URL to your Railway URL, e.g. "wss://your-app.up.railway.app/ws".
-const PROD_WS_URL = "wss://REPLACE-ME.up.railway.app/ws";
+const PROD_WS_URL = "wss://multiplayer-mastermind-production.up.railway.app/ws";
 
 function backendWsUrl() {
 	const host = window.location.hostname;
