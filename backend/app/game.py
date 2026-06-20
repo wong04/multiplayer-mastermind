@@ -51,6 +51,38 @@ def score_guess(secret: tuple[int, ...], guess: tuple[int, ...]) -> tuple[int, i
 	return black, white
 
 
+def score_guess_per_slot(secret: tuple[int, ...], guess: tuple[int, ...]) -> list[str]:
+	"""Return per-slot feedback: "exact", "present", or "absent" for each position.
+
+	Handles duplicates correctly: a color is only marked "present" as many times as
+	it appears in the secret, minus the number of exact matches for that color.
+	"""
+	if len(secret) != len(guess):
+		raise ValueError("secret and guess must be the same length")
+	length = len(secret)
+	result: list[str | None] = [None] * length
+	secret_pool = list(secret)
+	guess_pool = list(guess)
+
+	for i in range(length):
+		if secret[i] == guess[i]:
+			result[i] = "exact"
+			secret_pool[i] = None
+			guess_pool[i] = None
+
+	for i in range(length):
+		if result[i] is not None:
+			continue
+		g = guess_pool[i]
+		if g is not None and g in secret_pool:
+			result[i] = "present"
+			secret_pool[secret_pool.index(g)] = None
+		else:
+			result[i] = "absent"
+
+	return result  # type: ignore[return-value]
+
+
 def is_solved(black: int, length: int) -> bool:
 	"""True when every slot is correct."""
 	return black == length

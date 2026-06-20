@@ -14,14 +14,13 @@ function pegEl(colorIndex) {
 	return peg;
 }
 
-// Black = right color & position, white = right color wrong position.
-function feedbackEl(black, white, codeLength) {
+// Positional feedback: each square corresponds to the peg in the same slot.
+// per_slot is an array of "exact" | "present" | "absent".
+function feedbackEl(perSlot) {
 	const wrap = document.createElement("span");
 	wrap.className = "feedback";
-	for (let i = 0; i < black; i++) wrap.appendChild(keyPeg("black"));
-	for (let i = 0; i < white; i++) wrap.appendChild(keyPeg("white"));
-	const blanks = codeLength - black - white;
-	for (let i = 0; i < blanks; i++) wrap.appendChild(keyPeg("none"));
+	const kindMap = { exact: "black", present: "white", absent: "none" };
+	for (const s of perSlot) wrap.appendChild(keyPeg(kindMap[s] || "none"));
 	return wrap;
 }
 
@@ -38,7 +37,15 @@ function guessRow(result, codeLength) {
 	pegs.className = "pegs";
 	for (const c of result.guess) pegs.appendChild(pegEl(c));
 	row.appendChild(pegs);
-	row.appendChild(feedbackEl(result.black, result.white, codeLength));
+	// per_slot gives positional feedback; fall back to count-based for old data
+	const perSlot = result.per_slot && result.per_slot.length === codeLength
+		? result.per_slot
+		: [
+			...Array(result.black).fill("exact"),
+			...Array(result.white).fill("present"),
+			...Array(codeLength - result.black - result.white).fill("absent"),
+		  ];
+	row.appendChild(feedbackEl(perSlot));
 	return row;
 }
 

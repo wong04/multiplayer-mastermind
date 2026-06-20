@@ -40,6 +40,7 @@ class GuessResult:
 	black: int
 	white: int
 	guess_no: int
+	per_slot: list[str] = field(default_factory=list)
 
 	@property
 	def solved(self) -> bool:
@@ -51,12 +52,14 @@ class GuessResult:
 			"black": self.black,
 			"white": self.white,
 			"guess_no": self.guess_no,
+			"per_slot": self.per_slot,
 		}
 
 
 def _score(secret: tuple[int, ...], guess: tuple[int, ...], guess_no: int) -> GuessResult:
 	black, white = game.score_guess(secret, guess)
-	return GuessResult(guess=tuple(guess), black=black, white=white, guess_no=guess_no)
+	per_slot = game.score_guess_per_slot(secret, guess)
+	return GuessResult(guess=tuple(guess), black=black, white=white, guess_no=guess_no, per_slot=per_slot)
 
 
 def _validate_guess(room: Room, guess) -> tuple[int, ...]:
