@@ -268,10 +268,14 @@ function renderGame() {
 }
 
 function gameAreaTemplate() {
+	const restartBtn = isHost()
+		? `<button id="btn-restart-round" class="btn btn--ghost btn--sm">Restart round</button>`
+		: "";
 	return `
 		<div id="status-line" class="status-line"></div>
 		<div id="history" class="history"></div>
-		<div id="editor" class="editor"></div>`;
+		<div id="editor" class="editor"></div>
+		${restartBtn}`;
 }
 
 function renderCodemaker() {
@@ -379,6 +383,12 @@ function secretReveal(secret) {
 }
 
 $("btn-next-round").addEventListener("click", () => socket.send({ type: "next_round" }));
+
+document.addEventListener("click", (e) => {
+	if (e.target && e.target.id === "btn-restart-round") {
+		socket.send({ type: "restart_round" });
+	}
+});
 $("btn-rematch").addEventListener("click", () => socket.send({ type: "rematch" }));
 
 $("btn-leave").addEventListener("click", () => {

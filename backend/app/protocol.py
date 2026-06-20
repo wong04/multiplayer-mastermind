@@ -15,6 +15,7 @@ START_GAME = "start_game"
 SET_SECRET = "set_secret"
 SUBMIT_GUESS = "submit_guess"
 NEXT_ROUND = "next_round"
+RESTART_ROUND = "restart_round"
 REMATCH = "rematch"
 
 # -- server -> client message types --------------------------------------

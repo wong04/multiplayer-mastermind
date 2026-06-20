@@ -264,6 +264,7 @@ input:focus {
 	width: auto;
 }
 .btn--ghost:hover { border-color: var(--green); color: var(--green); }
+.btn--sm { font-size: 0.55rem; padding: 6px 10px; margin: 4px 18px 10px; }
 
 /* ---- Home split ---- */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; padding-bottom: 4px; }

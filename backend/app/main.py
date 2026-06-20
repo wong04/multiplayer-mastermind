@@ -287,6 +287,16 @@ async def _resolve_barrier(room: Room) -> None:
 		await manager.broadcast(room, barrier_msg(room))
 
 
+async def handle_restart_round(msg: dict, ws: WebSocket, session: Session) -> None:
+	room, player = _require_host(session)
+	if room.state != STATE_IN_ROUND:
+		raise GameError("No round in progress to restart")
+	room.round_no -= 1
+	room.round = None
+	modes.start_round(room)
+	await broadcast_round_start(room)
+
+
 async def handle_next_round(msg: dict, ws: WebSocket, session: Session) -> None:
 	room, player = _require_host(session)
 	if room.state != STATE_ROUND_OVER:
@@ -316,6 +326,7 @@ HANDLERS = {
 	p.SET_SECRET: handle_set_secret,
 	p.SUBMIT_GUESS: handle_submit_guess,
 	p.NEXT_ROUND: handle_next_round,
+	p.RESTART_ROUND: handle_restart_round,
 	p.REMATCH: handle_rematch,
 }
 
