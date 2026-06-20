@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Multiplayer Mastermind</title>
+	<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+	<header class="topbar">
+		<h1 class="brand">Master<span>mind</span></h1>
+		<div class="status">
+			<span id="status-dot" class="status-dot status-dot--connecting"></span>
+			<span id="status-text">connecting</span>
+		</div>
+	</header>
+
+	<main class="stage">
+		<!-- Home -->
+		<section id="screen-home" class="screen active">
+			<div class="card">
+				<h2>Play Mastermind together</h2>
+				<label class="field">
+					<span>Your nickname</span>
+					<input id="nickname" maxlength="20" placeholder="e.g. ada" autocomplete="off" />
+				</label>
+
+				<div class="split">
+					<div class="split-col">
+						<h3>Create a room</h3>
+						<div class="mode-pick">
+							<label class="radio">
+								<input type="radio" name="mode" value="classic" checked />
+								<div>
+									<strong>Classic</strong>
+									<small>One player sets the code; the others race to crack it.</small>
+								</div>
+							</label>
+							<label class="radio">
+								<input type="radio" name="mode" value="competition" />
+								<div>
+									<strong>Competition</strong>
+									<small>Everyone races the same secret in synced rounds.</small>
+								</div>
+							</label>
+						</div>
+						<button id="btn-create" class="btn btn--primary">Create room</button>
+					</div>
+
+					<div class="split-col">
+						<h3>Join a room</h3>
+						<label class="field">
+							<span>Room code</span>
+							<input id="join-code" maxlength="4" placeholder="ABCD" autocomplete="off" class="code-input" />
+						</label>
+						<button id="btn-join" class="btn">Join room</button>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Lobby -->
+		<section id="screen-lobby" class="screen">
+			<div class="card">
+				<div class="room-head">
+					<div>
+						<small>Room code</small>
+						<div class="room-code" id="lobby-code">----</div>
+					</div>
+					<button id="btn-copy-code" class="btn btn--ghost">Copy</button>
+				</div>
+
+				<p class="muted">Mode: <strong id="lobby-mode-label">Classic</strong></p>
+				<ul id="lobby-players" class="players"></ul>
+
+				<div id="host-controls" class="host-controls hidden">
+					<h3>Game settings</h3>
+					<div class="mode-toggle">
+						<button class="mode-btn" data-mode="classic">Classic</button>
+						<button class="mode-btn" data-mode="competition">Competition</button>
+					</div>
+					<div class="config-grid">
+						<label>Code length<input id="cfg-length" type="number" min="2" max="8" /></label>
+						<label>Colors<input id="cfg-colors" type="number" min="2" max="10" /></label>
+						<label>Max guesses<input id="cfg-guesses" type="number" min="1" max="20" /></label>
+						<label>Win at score<input id="cfg-target" type="number" min="1" max="20" /></label>
+					</div>
+					<button id="btn-apply-config" class="btn btn--ghost">Apply settings</button>
+					<button id="btn-start" class="btn btn--primary">Start game</button>
+					<p class="hint" id="start-hint"></p>
+				</div>
+				<p id="lobby-wait" class="muted hidden">Waiting for the host to start…</p>
+			</div>
+		</section>
+
+		<!-- Game -->
+		<section id="screen-game" class="screen">
+			<div class="card">
+				<div class="game-head">
+					<div class="round-meta">
+						<span id="round-no">Round 1</span>
+						<span class="pill" id="game-mode">Classic</span>
+					</div>
+					<div id="game-scoreboard" class="scoreboard"></div>
+				</div>
+				<div id="game-area" class="game-area"></div>
+			</div>
+		</section>
+
+		<!-- Round / game over -->
+		<section id="screen-over" class="screen">
+			<div class="card center">
+				<h2 id="over-title"></h2>
+				<p id="over-secret" class="secret-line"></p>
+				<div id="over-scoreboard" class="scoreboard big"></div>
+				<button id="btn-next-round" class="btn btn--primary hidden">Next round</button>
+				<button id="btn-rematch" class="btn btn--primary hidden">Rematch</button>
+				<p id="over-wait" class="muted hidden">Waiting for the host…</p>
+				<button id="btn-leave" class="btn btn--ghost">Leave game</button>
+			</div>
+		</section>
+	</main>
+
+	<div id="toast" class="toast"></div>
+
+	<script src="js/config.js"></script>
+	<script src="js/ws.js"></script>
+	<script src="js/board.js"></script>
+	<script src="js/app.js"></script>
+</body>
+</html>

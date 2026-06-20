@@ -1,0 +1,99 @@
+"""End-to-end WebSocket tests driving the real FastAPI app via TestClient."""
+
+import pytest
+from starlette.testclient import TestClient
+
+from app import protocol as p
+from app.main import app, registry
+
+
+@pytest.fixture(autouse=True)
+def clean_registry():
+	registry._rooms.clear()
+	yield
+	registry._rooms.clear()
+
+
+def recv_until(ws, type_):
+	"""Read messages until one of the given type arrives, returning it."""
+	for _ in range(20):
+		msg = ws.receive_json()
+		if msg["type"] == type_:
+			return msg
+	raise AssertionError(f"never received {type_}")
+
+
+def create(ws, nickname, mode="classic"):
+	ws.send_json({"type": p.CREATE_ROOM, "nickname": nickname, "mode": mode})
+	joined = recv_until(ws, p.ROOM_JOINED)
+	return joined
+
+
+def join(ws, code, nickname):
+	ws.send_json({"type": p.JOIN_ROOM, "room_code": code, "nickname": nickname})
+	return recv_until(ws, p.ROOM_JOINED)
+
+
+def test_create_and_join_flow():
+	client = TestClient(app)
+	with client.websocket_connect("/ws") as host, client.websocket_connect("/ws") as guest:
+		hj = create(host, "alice")
+		code = hj["room_code"]
+		gj = join(guest, code, "bob")
+		assert gj["room_code"] == code
+		lobby = recv_until(guest, p.LOBBY_UPDATE)
+		names = {pl["nickname"] for pl in lobby["players"]}
+		assert names == {"alice", "bob"}
+
+
+def test_competition_barrier_and_win():
+	client = TestClient(app)
+	with client.websocket_connect("/ws") as host, client.websocket_connect("/ws") as guest:
+		hj = create(host, "alice", mode="competition")
+		code = hj["room_code"]
+		join(guest, code, "bob")
+
+		host.send_json({"type": p.START_GAME})
+		rs_host = recv_until(host, p.ROUND_START)
+		recv_until(guest, p.ROUND_START)
+
+		# Reach into server state to learn the secret (test-only shortcut).
+		room = registry.get(code)
+		secret = list(room.round.secret)
+
+		# Host guesses wrong, guest guesses right -> guest wins this barrier.
+		wrong = [(c + 1) % room.config.n_colors for c in secret]
+		host.send_json({"type": p.SUBMIT_GUESS, "guess": wrong})
+		recv_until(host, p.BARRIER_UPDATE)
+		guest.send_json({"type": p.SUBMIT_GUESS, "guess": secret})
+
+		over = recv_until(host, p.ROUND_OVER)
+		assert over["secret"] == secret
+		winner = over["winner_id"]
+		guest_id = [pl["id"] for pl in over["scoreboard"] if pl["nickname"] == "bob"][0]
+		assert winner == guest_id
+
+
+def test_classic_codemaker_sets_secret_then_breaker_cracks():
+	client = TestClient(app)
+	with client.websocket_connect("/ws") as host, client.websocket_connect("/ws") as guest:
+		hj = create(host, "alice", mode="classic")
+		code = hj["room_code"]
+		join(guest, code, "bob")
+
+		host.send_json({"type": p.START_GAME})
+		recv_until(host, p.ROUND_START)
+		recv_until(guest, p.ROUND_START)
+
+		room = registry.get(code)
+		codemaker_id = room.round.codemaker_id
+		cm_ws, br_ws = (host, guest) if codemaker_id == hj["player_id"] else (guest, host)
+
+		cm_ws.send_json({"type": p.SET_SECRET, "secret": [0, 1, 2, 3]})
+		recv_until(br_ws, p.ROUND_START)  # secret_set broadcast
+
+		br_ws.send_json({"type": p.SUBMIT_GUESS, "guess": [0, 1, 2, 3]})
+		fb = recv_until(br_ws, p.GUESS_FEEDBACK)
+		assert fb["result"]["black"] == 4
+		over = recv_until(br_ws, p.ROUND_OVER)
+		assert over["reason"] == "cracked"
