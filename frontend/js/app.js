@@ -323,10 +323,8 @@ function renderBreaker() {
 
 function submitGuess(guess) {
 	socket.send({ type: "submit_guess", guess });
-	if (S.mode === "competition") {
-		S.round.alreadySubmitted = true;
-		S.editor.setEnabled(false);
-	}
+	S.round.alreadySubmitted = true;
+	if (S.editor) S.editor.setEnabled(false);
 }
 
 function setStatus(text) {

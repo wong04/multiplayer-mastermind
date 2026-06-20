@@ -460,12 +460,12 @@ input:focus {
 .palette-btn { cursor: pointer; transition: box-shadow 0.08s ease; }
 .palette-btn:hover { box-shadow: 0 0 0 2px var(--green), 0 0 8px var(--green-dim); }
 
-/* Feedback key pegs — tiny squares */
-.feedback { display: grid; grid-auto-flow: column; grid-template-rows: 1fr 1fr; gap: 3px; }
-.key { width: 11px; height: 11px; border-radius: 0; }
-.key--black { background: #050805; border: 1px solid var(--bv-lt); }
-.key--white { background: var(--green); box-shadow: 0 0 4px var(--green-dim); }
-.key--none  { background: transparent; border: 1px solid var(--bv-dk); }
+/* Feedback key pegs — single row, Wordle colors */
+.feedback { display: flex; flex-direction: row; gap: 4px; align-items: center; }
+.key { width: 14px; height: 14px; border-radius: 0; }
+.key--black { background: #6aaa64; }
+.key--white { background: #c9b458; }
+.key--none  { background: #3a3a3c; border: 1px solid #555; }
 
 /* ---- Guess editor ---- */
 .editor {

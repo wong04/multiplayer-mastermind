@@ -54,6 +54,7 @@ function renderHistory(container, board, codeLength) {
 function createGuessEditor(container, codeLength, nColors, onSubmit, submitLabel = "Submit guess") {
 	container.innerHTML = "";
 	let slots = new Array(codeLength).fill(null);
+	let _enabled = true;
 
 	const row = document.createElement("div");
 	row.className = "editor-row";
@@ -66,6 +67,7 @@ function createGuessEditor(container, codeLength, nColors, onSubmit, submitLabel
 		s.classList.add("slot");
 		s.title = "Click to clear";
 		s.addEventListener("click", () => {
+			if (!_enabled) return;
 			slots[i] = null;
 			refresh();
 		});
@@ -107,13 +109,14 @@ function createGuessEditor(container, codeLength, nColors, onSubmit, submitLabel
 			const fresh = pegEl(slots[i]);
 			fresh.classList.add("slot");
 			fresh.addEventListener("click", () => {
+				if (!_enabled) return;
 				slots[i] = null;
 				refresh();
 			});
 			slotEls[i].replaceWith(fresh);
 			slotEls[i] = fresh;
 		}
-		submit.disabled = slots.includes(null);
+		submit.disabled = !_enabled || slots.includes(null);
 	}
 
 	refresh();
@@ -123,8 +126,10 @@ function createGuessEditor(container, codeLength, nColors, onSubmit, submitLabel
 			refresh();
 		},
 		setEnabled(on) {
+			_enabled = on;
 			submit.disabled = !on || slots.includes(null);
 			palette.classList.toggle("disabled", !on);
+			slotsWrap.style.opacity = on ? "" : "0.5";
 		},
 	};
 }
