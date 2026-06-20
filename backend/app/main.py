@@ -6,6 +6,7 @@ in `protocol.py`. All room/game state lives in memory in a single `RoomRegistry`
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -43,6 +44,15 @@ registry = RoomRegistry()
 @app.get("/healthz")
 async def healthz() -> dict:
 	return {"status": "ok"}
+
+
+# Railway injects the deployed commit SHA; falls back to "unknown" locally.
+COMMIT_SHA = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "unknown")
+
+
+@app.get("/version")
+async def version() -> dict:
+	return {"commit": COMMIT_SHA, "modes": list(VALID_MODES)}
 
 
 class ConnectionManager:
