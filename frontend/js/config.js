@@ -15,14 +15,14 @@ function backendWsUrl() {
 // Palette: distinct hues, each paired with a symbol so colorblind players can
 // still tell them apart. Supports configs up to 10 colors.
 const PALETTE = [
-	{ bg: "#e6483d", symbol: "●" }, // red, circle
-	{ bg: "#2d8cf0", symbol: "■" }, // blue, square
-	{ bg: "#19be6b", symbol: "▲" }, // green, triangle
-	{ bg: "#f7b500", symbol: "★" }, // yellow, star
-	{ bg: "#9b59b6", symbol: "◆" }, // purple, diamond
-	{ bg: "#ff7a18", symbol: "✦" }, // orange, sparkle
-	{ bg: "#00bcd4", symbol: "▭" }, // cyan, bar
-	{ bg: "#e91e8c", symbol: "♥" }, // pink, heart
-	{ bg: "#7f8c8d", symbol: "▬" }, // grey, rect
-	{ bg: "#34495e", symbol: "❖" }, // navy, lozenge
+	{ bg: "#ff2222", symbol: "●" }, // NES red
+	{ bg: "#0088ff", symbol: "■" }, // NES blue
+	{ bg: "#33ff66", symbol: "▲" }, // phosphor green
+	{ bg: "#ffcc00", symbol: "★" }, // NES yellow
+	{ bg: "#cc44ff", symbol: "◆" }, // NES purple
+	{ bg: "#ff8800", symbol: "✦" }, // NES orange
+	{ bg: "#00ffee", symbol: "▭" }, // cyan
+	{ bg: "#ff44aa", symbol: "♥" }, // hot pink
+	{ bg: "#888888", symbol: "▬" }, // grey
+	{ bg: "#4488cc", symbol: "❖" }, // steel blue
 ];
