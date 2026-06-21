@@ -22,6 +22,7 @@ from . import game
 from .rooms import (
 	MODE_CLASSIC,
 	MODE_COMPETITION,
+	MODE_DAILY,
 	MODE_SOLO,
 	STATE_GAME_OVER,
 	STATE_IN_ROUND,
@@ -65,9 +66,17 @@ def _score(secret: tuple[int, ...], guess: tuple[int, ...], guess_no: int) -> Gu
 
 def _validate_guess(room: Room, guess) -> tuple[int, ...]:
 	cfg = room.config
-	if not game.is_valid_guess(guess, cfg.code_length, cfg.n_colors):
+	if not game.is_valid_guess(guess, cfg.code_length, cfg.effective_colors()):
 		raise GameError("Invalid guess: wrong length or color out of range")
 	return tuple(guess)
+
+
+def _check_hard_mode(room: Room, guess: tuple[int, ...], board: list[GuessResult]) -> None:
+	if not room.config.hard_mode:
+		return
+	history = [(r.guess, r.black, r.white) for r in board]
+	if not game.is_consistent_with_history(guess, history):
+		raise GameError("Hard mode: guess must be consistent with previous clues")
 
 
 def board_to_dicts(board: list[GuessResult]) -> list[dict]:
@@ -135,7 +144,9 @@ def submit_classic_guess(room: Room, player_id: str, guess) -> dict:
 	if len(board) >= room.config.max_guesses:
 		raise GameError("You have used all your guesses")
 
-	result = _score(rnd.secret, _validate_guess(room, guess), len(board) + 1)
+	guess_t = _validate_guess(room, guess)
+	_check_hard_mode(room, guess_t, board)
+	result = _score(rnd.secret, guess_t, len(board) + 1)
 	board.append(result)
 
 	outcome: dict = {"result": result, "round_over": False}
@@ -229,8 +240,22 @@ def start_solo_round(room: Room) -> CompetitionRound:
 	return _start_server_secret_round(room)
 
 
+def start_daily_round(room: Room) -> CompetitionRound:
+	"""Begin the deterministic daily-challenge round (single player)."""
+	if len(room.connected_players()) < 1:
+		raise GameError("Need at least 1 player")
+	if room.daily_day is None:
+		raise GameError("Daily room missing its day number")
+	secret = game.generate_daily_secret(room.daily_day, room.config.code_length, room.config.effective_colors())
+	return _make_competition_round(room, secret)
+
+
 def _start_server_secret_round(room: Room) -> CompetitionRound:
-	secret = game.generate_secret(room.config.code_length, room.config.n_colors)
+	secret = game.generate_secret(room.config.code_length, room.config.effective_colors())
+	return _make_competition_round(room, secret)
+
+
+def _make_competition_round(room: Room, secret: tuple[int, ...]) -> CompetitionRound:
 	rnd = CompetitionRound(secret=secret)
 	room.round = rnd
 	room.round_no += 1
@@ -248,6 +273,7 @@ def submit_competition_guess(room: Room, player_id: str, guess) -> None:
 	if player_id in rnd.pending:
 		raise GameError("You already submitted this round")
 	guess_t = _validate_guess(room, guess)
+	_check_hard_mode(room, guess_t, rnd.board(player_id))
 	result = _score(rnd.secret, guess_t, rnd.guess_no)
 	rnd.pending[player_id] = Submission(result=result, seq=next(rnd._seq))
 
@@ -321,16 +347,18 @@ def start_round(room: Room):
 		return start_competition_round(room)
 	if room.mode == MODE_SOLO:
 		return start_solo_round(room)
+	if room.mode == MODE_DAILY:
+		return start_daily_round(room)
 	raise GameError(f"Unknown mode: {room.mode}")
 
 
 def finish_round(room: Room) -> Player | None:
 	"""Mark the round over and return the match winner if the target score is reached.
 
-	Solo has no match target: it always returns to `round_over` so the player can
-	keep dealing fresh codes via `next_round`.
+	Solo and daily have no match target: they always return to `round_over` so the
+	player can keep dealing fresh codes via `next_round`.
 	"""
-	if room.mode == MODE_SOLO:
+	if room.mode in (MODE_SOLO, MODE_DAILY):
 		room.state = STATE_ROUND_OVER
 		return None
 	match_winner = room.winner_by_score()

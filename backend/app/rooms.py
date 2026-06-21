@@ -19,7 +19,8 @@ ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MODE_CLASSIC = "classic"
 MODE_COMPETITION = "competition"
 MODE_SOLO = "solo"
-VALID_MODES = (MODE_CLASSIC, MODE_COMPETITION, MODE_SOLO)
+MODE_DAILY = "daily"
+VALID_MODES = (MODE_CLASSIC, MODE_COMPETITION, MODE_SOLO, MODE_DAILY)
 
 STATE_LOBBY = "lobby"
 STATE_IN_ROUND = "in_round"
@@ -53,6 +54,16 @@ class GameConfig:
 	n_colors: int = 6
 	max_guesses: int = 10
 	target_score: int = 3
+	# 0 = no per-turn timer; otherwise seconds allowed per competition barrier.
+	turn_seconds: int = 0
+	# Blanks add one extra symbol (the empty peg) as a usable color.
+	allow_blanks: bool = False
+	# Hard mode: each guess must stay consistent with all prior feedback.
+	hard_mode: bool = False
+
+	def effective_colors(self) -> int:
+		"""Total distinct symbols a guess may use, counting the blank when enabled."""
+		return self.n_colors + (1 if self.allow_blanks else 0)
 
 	def to_dict(self) -> dict:
 		return {
@@ -60,6 +71,9 @@ class GameConfig:
 			"n_colors": self.n_colors,
 			"max_guesses": self.max_guesses,
 			"target_score": self.target_score,
+			"turn_seconds": self.turn_seconds,
+			"allow_blanks": self.allow_blanks,
+			"hard_mode": self.hard_mode,
 		}
 
 
@@ -94,6 +108,8 @@ class Room:
 	codemaker_turn: int = 0
 	# Current round state object (defined in modes.py) or None in the lobby.
 	round: object | None = None
+	# Day number for a daily-challenge room (set at creation), else None.
+	daily_day: int | None = None
 
 	# -- membership --------------------------------------------------------
 

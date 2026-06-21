@@ -1,10 +1,23 @@
 // Rendering helpers for pegs, guess history, feedback, and the guess editor.
 
+// When blanks are enabled this is set to the index used for the blank symbol so
+// it renders distinctly instead of borrowing a palette color. -1 = disabled.
+let _blankIndex = -1;
+function setBlankIndex(idx) {
+	_blankIndex = idx;
+}
+
 function pegEl(colorIndex) {
 	const peg = document.createElement("span");
 	peg.className = "peg";
 	if (colorIndex === null || colorIndex === undefined) {
 		peg.classList.add("peg--empty");
+		return peg;
+	}
+	if (colorIndex === _blankIndex) {
+		peg.classList.add("peg--blank");
+		peg.textContent = "∅";
+		peg.setAttribute("aria-label", "blank");
 		return peg;
 	}
 	const c = PALETTE[colorIndex];

@@ -6,8 +6,10 @@ in `protocol.py`. All room/game state lives in memory in a single `RoomRegistry`
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +18,8 @@ from . import modes, protocol as p
 from .modes import ClassicRound, CompetitionRound, GameError
 from .rooms import (
 	MIN_PLAYERS,
+	MODE_COMPETITION,
+	MODE_DAILY,
 	MODE_SOLO,
 	STATE_GAME_OVER,
 	STATE_IN_ROUND,
@@ -27,6 +31,18 @@ from .rooms import (
 	RoomError,
 	RoomRegistry,
 )
+
+# Daily puzzle #1 falls on this UTC date; the number increments each day after.
+DAILY_EPOCH = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+
+def today_daily_number() -> int:
+	"""1-based puzzle number for the current UTC day."""
+	return (datetime.now(timezone.utc) - DAILY_EPOCH).days + 1
+
+
+# Modes that skip the lobby and start a single-player round immediately.
+SKIP_LOBBY_MODES = (MODE_SOLO, MODE_DAILY)
 
 app = FastAPI(title="Multiplayer Mastermind")
 
@@ -131,6 +147,8 @@ def round_start_msg(room: Room, player_id: str) -> dict:
 			total=len(room.connected_players()),
 			already_submitted=player_id in rnd.pending,
 		)
+	if room.mode == MODE_DAILY:
+		payload["daily_no"] = room.daily_day
 	return p.make(p.ROUND_START, **payload)
 
 
@@ -157,9 +175,11 @@ async def broadcast_lobby(room: Room) -> None:
 async def broadcast_round_start(room: Room) -> None:
 	for player in room.player_order():
 		await manager.send(player.id, round_start_msg(room, player.id))
+	await arm_turn_timer(room)
 
 
 async def emit_round_over(room: Room, winner_id: str | None, reason: str) -> None:
+	cancel_turn_timer(room)
 	rnd = room.round
 	secret = list(rnd.secret) if getattr(rnd, "secret", None) is not None else None
 	match_winner = modes.finish_round(room)
@@ -190,14 +210,21 @@ async def handle_create_room(msg: dict, ws: WebSocket, session: Session) -> None
 	if mode not in VALID_MODES:
 		raise RoomError(f"Unknown mode: {mode}")
 	nickname = msg.get("nickname", "")
-	if mode == MODE_SOLO and not nickname.strip():
+	if mode in SKIP_LOBBY_MODES and not nickname.strip():
 		nickname = "Player"
 	room, player = registry.create_room(nickname, mode=mode)
 	_bind(session, room, player, ws)
 	await _send_joined(room, player)
-	if mode == MODE_SOLO:
-		# Solo skips the lobby: apply any chosen difficulty and start immediately.
-		_apply_config(room, msg.get("config") or {})
+	if mode in SKIP_LOBBY_MODES:
+		# Solo/daily skip the lobby and start immediately.
+		if mode == MODE_DAILY:
+			# Everyone shares the same code and rules for the day.
+			room.daily_day = today_daily_number()
+			room.config.code_length = 4
+			room.config.n_colors = 6
+			room.config.max_guesses = 10
+		else:
+			_apply_config(room, msg.get("config") or {})
 		modes.start_round(room)
 		await broadcast_round_start(room)
 		return
@@ -247,6 +274,20 @@ def _apply_config(room: Room, cfg_msg: dict) -> None:
 	cfg.n_colors = _clamp(cfg_msg.get("n_colors", cfg.n_colors), 2, 10)
 	cfg.max_guesses = _clamp(cfg_msg.get("max_guesses", cfg.max_guesses), 1, 20)
 	cfg.target_score = _clamp(cfg_msg.get("target_score", cfg.target_score), 1, 20)
+	cfg.turn_seconds = _clamp_turn_seconds(cfg_msg.get("turn_seconds", cfg.turn_seconds))
+	cfg.allow_blanks = bool(cfg_msg.get("allow_blanks", cfg.allow_blanks))
+	cfg.hard_mode = bool(cfg_msg.get("hard_mode", cfg.hard_mode))
+
+
+def _clamp_turn_seconds(value) -> int:
+	"""0 disables the timer; any positive value is clamped to a sane 10–300s range."""
+	try:
+		value = int(value)
+	except (TypeError, ValueError):
+		raise GameError("Turn timer must be an integer")
+	if value <= 0:
+		return 0
+	return max(10, min(300, value))
 
 
 async def handle_start_game(msg: dict, ws: WebSocket, session: Session) -> None:
@@ -309,6 +350,50 @@ async def _resolve_barrier(room: Room) -> None:
 		await emit_round_over(room, outcome["winner_id"], "cracked" if outcome["winner_id"] else "unbroken")
 	else:
 		await manager.broadcast(room, barrier_msg(room))
+		await arm_turn_timer(room)
+
+
+# ---------------------------------------------------------------------------
+# Per-turn timer (competition mode)
+# ---------------------------------------------------------------------------
+
+# One countdown task per room while a timed competition barrier is open.
+_turn_timers: dict[str, asyncio.Task] = {}
+
+
+def cancel_turn_timer(room: Room) -> None:
+	task = _turn_timers.pop(room.code, None)
+	if task is not None:
+		task.cancel()
+
+
+async def arm_turn_timer(room: Room) -> None:
+	"""Start (or restart) the countdown for the current competition barrier."""
+	cancel_turn_timer(room)
+	cfg = room.config
+	if room.mode != MODE_COMPETITION or cfg.turn_seconds <= 0:
+		return
+	rnd = room.round
+	if not isinstance(rnd, CompetitionRound) or rnd.finished:
+		return
+	await manager.broadcast(room, p.make(p.TURN_TIMER, seconds=cfg.turn_seconds, guess_no=rnd.guess_no))
+	_turn_timers[room.code] = asyncio.create_task(_turn_timeout(room, cfg.turn_seconds, rnd.guess_no))
+
+
+async def _turn_timeout(room: Room, seconds: int, guess_no: int) -> None:
+	try:
+		await asyncio.sleep(seconds)
+	except asyncio.CancelledError:
+		return
+	# Drop our own registry entry first so resolution's cancel calls are no-ops.
+	_turn_timers.pop(room.code, None)
+	rnd = room.round
+	if room.state != STATE_IN_ROUND or not isinstance(rnd, CompetitionRound):
+		return
+	if rnd.finished or rnd.guess_no != guess_no:
+		return
+	# Time's up: resolve with whoever submitted (non-submitters skip this guess).
+	await _resolve_barrier(room)
 
 
 async def handle_restart_round(msg: dict, ws: WebSocket, session: Session) -> None:
@@ -336,6 +421,7 @@ async def handle_rematch(msg: dict, ws: WebSocket, session: Session) -> None:
 	room, player = _require_host(session)
 	if room.state != STATE_GAME_OVER:
 		raise GameError("Match is not over")
+	cancel_turn_timer(room)
 	room.reset_scores()
 	room.round = None
 	room.round_no = 0
@@ -395,6 +481,7 @@ async def _handle_disconnect(session: Session) -> None:
 	manager.unregister(player.id)
 
 	if room.all_disconnected():
+		cancel_turn_timer(room)
 		registry.remove(room.code)
 		return
 

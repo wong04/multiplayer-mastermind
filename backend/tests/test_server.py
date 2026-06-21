@@ -123,6 +123,19 @@ def test_solo_skips_lobby_and_auto_starts():
 		assert over["reason"] == "cracked"
 
 
+def test_daily_skips_lobby_with_shared_config():
+	client = TestClient(app)
+	with client.websocket_connect("/ws") as solo:
+		solo.send_json({"type": p.CREATE_ROOM, "nickname": "", "mode": "daily"})
+		recv_until(solo, p.ROOM_JOINED)
+		rs = recv_until(solo, p.ROUND_START)
+		# Daily forces the shared standard ruleset and carries a puzzle number.
+		assert rs["config"]["code_length"] == 4
+		assert rs["config"]["n_colors"] == 6
+		assert rs["config"]["max_guesses"] == 10
+		assert rs["daily_no"] >= 1
+
+
 def test_restart_round_keeps_same_classic_codemaker():
 	client = TestClient(app)
 	with client.websocket_connect("/ws") as host, client.websocket_connect("/ws") as guest:

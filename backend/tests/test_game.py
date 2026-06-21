@@ -1,11 +1,41 @@
 import pytest
 
 from app.game import (
+	generate_daily_secret,
 	generate_secret,
+	is_consistent_with_history,
 	is_solved,
 	is_valid_guess,
 	score_guess,
 )
+
+
+class TestDailySecret:
+	def test_deterministic_for_same_day(self):
+		a = generate_daily_secret(100, length=4, n_colors=6)
+		b = generate_daily_secret(100, length=4, n_colors=6)
+		assert a == b
+		assert len(a) == 4 and all(0 <= c < 6 for c in a)
+
+	def test_differs_across_days(self):
+		# Not a hard guarantee for any two seeds, but stable for these fixed ones.
+		days = {generate_daily_secret(d, 4, 6) for d in range(20)}
+		assert len(days) > 1
+
+
+class TestConsistentWithHistory:
+	def test_empty_history_allows_anything(self):
+		assert is_consistent_with_history((0, 1, 2, 3), []) is True
+
+	def test_rejects_guess_inconsistent_with_clue(self):
+		secret = (0, 1, 2, 3)
+		prior = (0, 1, 4, 5)  # vs secret -> black=2, white=0
+		black, white = score_guess(secret, prior)
+		history = [(prior, black, white)]
+		# A candidate that would not reproduce (2,0) against the prior guess is rejected.
+		assert is_consistent_with_history((4, 4, 4, 4), history) is False
+		# The real secret is always consistent.
+		assert is_consistent_with_history(secret, history) is True
 
 
 class TestGenerateSecret:

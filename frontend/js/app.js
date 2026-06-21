@@ -2,7 +2,17 @@
 
 const SESSION_KEY = "mastermind_session";
 
-const MODE_LABELS = { classic: "Classic", competition: "Competition", solo: "Solo" };
+const MODE_LABELS = { classic: "Classic", competition: "Competition", solo: "Solo", daily: "Daily" };
+
+// Solo and daily share the single-player flow (server secret, instant resolve).
+function isSoloLike() {
+	return S.mode === "solo" || S.mode === "daily";
+}
+
+// Total selectable symbols, counting the blank tile when blanks are enabled.
+function effectiveColors(config) {
+	return config.n_colors + (config.allow_blanks ? 1 : 0);
+}
 
 const S = {
 	playerId: null,
@@ -126,6 +136,7 @@ socket.on("round_start", (m) => {
 	S.round = {
 		mode: m.mode,
 		roundNo: m.round_no,
+		dailyNo: m.daily_no || null,
 		role: m.role || null,
 		codemakerId: m.codemaker_id || null,
 		secretSet: !!m.secret_set,
@@ -136,6 +147,9 @@ socket.on("round_start", (m) => {
 		alreadySubmitted: !!m.already_submitted,
 		ended: false,
 	};
+	// Blanks render as a distinct symbol at the index just past the real colors.
+	setBlankIndex(S.config.allow_blanks ? S.config.n_colors : -1);
+	stopTurnTimer();
 	renderGame();
 	showScreen("game");
 });
@@ -144,19 +158,24 @@ socket.on("guess_feedback", (m) => {
 	if (!S.round) return;
 	S.round.board = m.board;
 	renderHistory($("history"), S.round.board, S.config.code_length);
-	if (S.mode === "competition" || S.mode === "solo") {
+	if (S.mode === "competition" || isSoloLike()) {
 		// Barrier resolved: a new guess round begins (unless round_over follows).
 		S.round.alreadySubmitted = false;
 		if (S.editor) {
 			S.editor.reset();
 			S.editor.setEnabled(true);
 		}
-		if (S.mode === "solo") updateSoloStatus();
+		if (isSoloLike()) updateSoloStatus();
 		else setStatus("");
 	} else if (!m.result.solved && S.editor) {
 		S.editor.reset();
 		S.editor.setEnabled(true);
 	}
+});
+
+socket.on("turn_timer", (m) => {
+	if (!S.round) return;
+	startTurnTimer(m.seconds);
 });
 
 socket.on("barrier_update", (m) => {
@@ -170,6 +189,7 @@ socket.on("barrier_update", (m) => {
 socket.on("round_over", (m) => {
 	if (S.round) S.round.ended = true;
 	if (m.scoreboard) S.players = m.scoreboard;
+	stopTurnTimer();
 	renderOver(m, false);
 	showScreen("over");
 });
@@ -218,6 +238,54 @@ $("btn-solo").addEventListener("click", () => {
 	socket.send({ type: "create_room", mode: "solo", nickname, config: DIFFICULTIES[soloDifficulty] });
 });
 
+$("btn-daily").addEventListener("click", () => {
+	if (hasPlayedDaily(todayDailyNumber())) {
+		toast("You've already played today's daily — come back tomorrow!", "info");
+		openStats();
+		return;
+	}
+	const nickname = $("nickname").value.trim() || "Player";
+	socket.send({ type: "create_room", mode: "daily", nickname });
+});
+
+// -- stats modal -----------------------------------------------------------
+
+function openStats() {
+	renderStats();
+	$("stats-modal").classList.remove("hidden");
+}
+
+function renderStats() {
+	const s = getStats();
+	const winPct = s.gamesPlayed ? Math.round((s.wins / s.gamesPlayed) * 100) : 0;
+	const cells = [
+		["Played", s.gamesPlayed],
+		["Win %", winPct],
+		["Streak", s.currentStreak],
+		["Best", s.maxStreak],
+	];
+	$("stats-cells").innerHTML = cells
+		.map(([label, val]) => `<div class="stat-cell"><span class="stat-val">${val}</span><span class="stat-label">${label}</span></div>`)
+		.join("");
+
+	const dist = s.guessDist || {};
+	const max = Math.max(1, ...Object.values(dist));
+	let rows = "";
+	for (let g = 1; g <= 20; g++) {
+		const count = dist[g] || 0;
+		if (!count && g > 10) continue;
+		const pct = Math.round((count / max) * 100);
+		rows += `<div class="dist-row"><span class="dist-g">${g}</span><span class="dist-bar" style="width:${Math.max(8, pct)}%">${count || ""}</span></div>`;
+	}
+	$("stats-dist").innerHTML = rows;
+}
+
+$("btn-stats").addEventListener("click", openStats);
+$("btn-stats-close").addEventListener("click", () => $("stats-modal").classList.add("hidden"));
+$("stats-modal").addEventListener("click", (e) => {
+	if (e.target.id === "stats-modal") $("stats-modal").classList.add("hidden");
+});
+
 // -- lobby -----------------------------------------------------------------
 
 function renderLobby() {
@@ -232,7 +300,7 @@ function renderLobby() {
 		list.appendChild(li);
 	}
 
-	$("lobby-mode-label").textContent = S.mode === "classic" ? "Classic" : "Competition";
+	$("lobby-mode-label").textContent = MODE_LABELS[S.mode] || "Classic";
 	$("lobby-count").textContent = `${S.players.length}/${MAX_PLAYERS}`;
 	const host = isHost();
 	$("host-controls").classList.toggle("hidden", !host);
@@ -246,6 +314,9 @@ function renderLobby() {
 		$("cfg-colors").value = S.config.n_colors;
 		$("cfg-guesses").value = S.config.max_guesses;
 		$("cfg-target").value = S.config.target_score;
+		$("cfg-timer").value = S.config.turn_seconds;
+		$("cfg-blanks").checked = !!S.config.allow_blanks;
+		$("cfg-hard").checked = !!S.config.hard_mode;
 		const short = S.players.length < 2;
 		$("btn-start").disabled = short;
 		$("start-hint").textContent = short
@@ -265,6 +336,9 @@ $("btn-apply-config").addEventListener("click", () => {
 		n_colors: Number($("cfg-colors").value),
 		max_guesses: Number($("cfg-guesses").value),
 		target_score: Number($("cfg-target").value),
+		turn_seconds: Number($("cfg-timer").value),
+		allow_blanks: $("cfg-blanks").checked,
+		hard_mode: $("cfg-hard").checked,
 	});
 	toast("Settings applied", "info");
 });
@@ -303,7 +377,10 @@ function renderScoreboards() {
 function renderGame() {
 	renderScoreboards();
 	const r = S.round;
-	$("round-no").textContent = r.mode === "solo" ? `Game ${r.roundNo}` : `Round ${r.roundNo}`;
+	let label = `Round ${r.roundNo}`;
+	if (r.mode === "solo") label = `Game ${r.roundNo}`;
+	else if (r.mode === "daily") label = `Daily #${r.dailyNo}`;
+	$("round-no").textContent = label;
 	$("game-mode").textContent = MODE_LABELS[r.mode] || "Classic";
 
 	const area = $("game-area");
@@ -322,6 +399,7 @@ function gameAreaTemplate() {
 		: "";
 	return `
 		<div id="status-line" class="status-line"></div>
+		<div id="turn-timer" class="turn-timer hidden"></div>
 		<div id="history" class="history"></div>
 		<div id="editor" class="editor"></div>
 		${restartBtn}`;
@@ -335,7 +413,7 @@ function renderCodemaker() {
 		S.editor = createGuessEditor(
 			$("editor"),
 			S.config.code_length,
-			S.config.n_colors,
+			effectiveColors(S.config),
 			(secret) => socket.send({ type: "set_secret", secret }),
 			"Lock in secret",
 		);
@@ -359,11 +437,11 @@ function renderBreaker() {
 	S.editor = createGuessEditor(
 		$("editor"),
 		S.config.code_length,
-		S.config.n_colors,
+		effectiveColors(S.config),
 		(guess) => submitGuess(guess),
 	);
 
-	if (r.mode === "solo") {
+	if (isSoloLike()) {
 		updateSoloStatus();
 	} else if (r.mode === "competition") {
 		if (r.alreadySubmitted) {
@@ -401,6 +479,42 @@ function updateBarrierText() {
 	setStatus(`${waiting}guess ${r.guessNo} · ${r.submitted}/${r.total} submitted`);
 }
 
+// -- per-turn timer (competition) ------------------------------------------
+
+let _timerInterval = null;
+
+function stopTurnTimer() {
+	if (_timerInterval) {
+		clearInterval(_timerInterval);
+		_timerInterval = null;
+	}
+	const el = $("turn-timer");
+	if (el) el.classList.add("hidden");
+}
+
+function startTurnTimer(seconds) {
+	stopTurnTimer();
+	const el = $("turn-timer");
+	if (!el) return;
+	let remaining = seconds;
+	el.classList.remove("hidden");
+	const tick = () => {
+		el.textContent = `⏱ ${remaining}s`;
+		el.classList.toggle("turn-timer--low", remaining <= 5);
+		if (remaining <= 0) {
+			stopTurnTimer();
+			// Server resolves authoritatively; just lock input locally.
+			if (S.editor && !S.round.alreadySubmitted) S.editor.setEnabled(false);
+			el.classList.remove("hidden");
+			el.textContent = "⏱ Time's up — resolving…";
+			return;
+		}
+		remaining -= 1;
+	};
+	tick();
+	_timerInterval = setInterval(tick, 1000);
+}
+
 // -- round / game over -----------------------------------------------------
 
 function renderOver(m, isGameOver) {
@@ -409,7 +523,9 @@ function renderOver(m, isGameOver) {
 	const sub = $("over-secret");
 	sub.textContent = "";
 
-	if (S.mode === "solo") {
+	if (S.mode === "daily") {
+		renderDailyOver(m, title, sub);
+	} else if (S.mode === "solo") {
 		renderSoloOver(m, title, sub);
 	} else if (isGameOver) {
 		const champ = nameOf(m.winner_id);
@@ -431,6 +547,22 @@ function renderOver(m, isGameOver) {
 	reconcileOverControls(isGameOver);
 }
 
+function renderDailyOver(m, title, sub) {
+	const solved = m.winner_id === S.playerId;
+	const guesses = S.round ? S.round.board.length : 0;
+	const day = S.round && S.round.dailyNo ? S.round.dailyNo : todayDailyNumber();
+	recordDaily({ day, solved, guesses });
+	if (solved) {
+		title.textContent = `🗓️ Daily #${day} — solved in ${guesses}!`;
+	} else {
+		title.textContent = `🗓️ Daily #${day} — out of guesses`;
+		if (m.secret) {
+			sub.innerHTML = "The code was: ";
+			sub.appendChild(secretReveal(m.secret));
+		}
+	}
+}
+
 function renderSoloOver(m, title, sub) {
 	if (m.winner_id === S.playerId) {
 		const guesses = S.round ? S.round.board.length : 0;
@@ -447,6 +579,17 @@ function renderSoloOver(m, title, sub) {
 // Show the right host actions on the results screen. Solo always offers a fresh
 // game; multiplayer gates Next round / Rematch behind being the host.
 function reconcileOverControls(isGameOver) {
+	const share = $("btn-share");
+	share.classList.add("hidden");
+
+	if (S.mode === "daily") {
+		// One play per day: no replay, just share + leave.
+		$("btn-next-round").classList.add("hidden");
+		$("btn-rematch").classList.add("hidden");
+		$("over-wait").classList.add("hidden");
+		share.classList.remove("hidden");
+		return;
+	}
 	if (S.mode === "solo") {
 		$("btn-next-round").textContent = "Play again";
 		$("btn-next-round").classList.remove("hidden");
@@ -476,6 +619,14 @@ document.addEventListener("click", (e) => {
 	}
 });
 $("btn-rematch").addEventListener("click", () => socket.send({ type: "rematch" }));
+
+$("btn-share").addEventListener("click", () => {
+	if (!S.round) return;
+	const solved = !!S.round.ended && S.round.board.some((r) => (r.per_slot || []).every((s) => s === "exact"));
+	const text = buildShareGrid(S.round.dailyNo || todayDailyNumber(), S.round.board, S.config.max_guesses, solved);
+	navigator.clipboard?.writeText(text);
+	toast("Result copied — paste it anywhere!", "info");
+});
 
 $("btn-leave").addEventListener("click", () => {
 	clearSession();

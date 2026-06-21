@@ -13,6 +13,7 @@
 	<header class="topbar">
 		<h1 class="brand">Master<span>mind</span></h1>
 		<div class="status">
+			<button id="btn-stats" class="btn btn--ghost btn--sm" title="Your daily stats">📊 Stats</button>
 			<span id="status-dot" class="status-dot status-dot--connecting"></span>
 			<span id="status-text">connecting</span>
 		</div>
@@ -71,6 +72,10 @@
 							<button class="diff-btn" data-diff="hard">Hard</button>
 						</div>
 						<button id="btn-solo" class="btn btn--primary">Play solo</button>
+						<div class="daily-row">
+							<button id="btn-daily" class="btn btn--ghost">🗓️ Daily challenge</button>
+							<small class="muted">Same code for everyone, once a day.</small>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -104,6 +109,11 @@
 							<label>Colors<input id="cfg-colors" type="number" min="2" max="10" /></label>
 							<label>Max guesses<input id="cfg-guesses" type="number" min="1" max="20" /></label>
 							<label>Win at score<input id="cfg-target" type="number" min="1" max="20" /></label>
+							<label>Turn timer (s, 0=off)<input id="cfg-timer" type="number" min="0" max="300" /></label>
+						</div>
+						<div class="variant-toggles">
+							<label class="check"><input id="cfg-blanks" type="checkbox" /> Allow blanks</label>
+							<label class="check"><input id="cfg-hard" type="checkbox" /> Hard mode</label>
 						</div>
 						<button id="btn-apply-config" class="btn btn--ghost">Apply settings</button>
 						<button id="btn-start" class="btn btn--primary">Start game</button>
@@ -140,6 +150,7 @@
 					<div id="over-scoreboard" class="scoreboard big"></div>
 					<button id="btn-next-round" class="btn btn--primary hidden">Next round</button>
 					<button id="btn-rematch" class="btn btn--primary hidden">Rematch</button>
+					<button id="btn-share" class="btn btn--primary hidden">Share result</button>
 					<p id="over-wait" class="muted hidden">Waiting for the host…</p>
 					<button id="btn-leave" class="btn btn--ghost">Leave game</button>
 				</div>
@@ -147,9 +158,24 @@
 		</section>
 	</main>
 
+	<!-- Stats modal -->
+	<div id="stats-modal" class="modal hidden">
+		<div class="modal-card card">
+			<div class="titlebar"><span>STATS.EXE</span><button id="btn-stats-close" class="win-btns">✕</button></div>
+			<div class="card-body">
+				<h2>Daily stats</h2>
+				<div id="stats-cells" class="stats-cells"></div>
+				<h3>Guess distribution</h3>
+				<div id="stats-dist" class="stats-dist"></div>
+			</div>
+		</div>
+	</div>
+
 	<div id="toast" class="toast"></div>
 
 	<script src="js/config.js"></script>
+	<script src="js/stats.js"></script>
+	<script src="js/share.js"></script>
 	<script src="js/ws.js"></script>
 	<script src="js/board.js"></script>
 	<script src="js/app.js"></script>

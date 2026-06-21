@@ -1,9 +1,10 @@
 import pytest
 
-from app import modes
+from app import game, modes
 from app.rooms import (
 	MODE_CLASSIC,
 	MODE_COMPETITION,
+	MODE_DAILY,
 	MODE_SOLO,
 	STATE_GAME_OVER,
 	STATE_ROUND_OVER,
@@ -115,6 +116,75 @@ class TestSolo:
 		assert out["round_over"] is True
 		assert out["winner_id"] == host.id
 		assert host.score == 1
+
+
+# ---------------------------------------------------------------------------
+# Daily
+# ---------------------------------------------------------------------------
+
+
+class TestDaily:
+	def test_daily_secret_matches_seed(self):
+		reg = RoomRegistry()
+		room, host = reg.create_room("p0", mode=MODE_DAILY)
+		room.daily_day = 42
+		rnd = modes.start_round(room)
+		assert rnd.secret == game.generate_daily_secret(42, room.config.code_length, room.config.effective_colors())
+
+	def test_daily_requires_day_number(self):
+		reg = RoomRegistry()
+		room, host = reg.create_room("p0", mode=MODE_DAILY)
+		with pytest.raises(modes.GameError):
+			modes.start_round(room)
+
+
+# ---------------------------------------------------------------------------
+# Variants: blanks + hard mode
+# ---------------------------------------------------------------------------
+
+
+class TestVariants:
+	def test_blank_index_is_a_valid_color(self):
+		room, players = make_room(MODE_COMPETITION, n_players=2, allow_blanks=True)
+		rnd = modes.start_competition_round(room)
+		blank = room.config.n_colors  # the extra symbol blanks add
+		# A guess using the blank index must validate and score without error.
+		modes.submit_competition_guess(room, players[0].id, [blank, blank, blank, blank])
+		assert players[0].id in rnd.pending
+
+	def test_hard_mode_rejects_inconsistent_guess(self):
+		room, players = make_room(MODE_COMPETITION, n_players=2, hard_mode=True)
+		rnd = modes.start_competition_round(room)
+		rnd.secret = (0, 1, 2, 3)
+		prior = (0, 1, 4, 5)
+		for p in players:
+			modes.submit_competition_guess(room, p.id, list(prior))
+		modes.resolve_competition_barrier(room)  # commits the clue to each board
+		# A guess that can't satisfy the prior clue is rejected for the player.
+		with pytest.raises(modes.GameError):
+			modes.submit_competition_guess(room, players[0].id, [4, 4, 4, 4])
+		# The true secret stays consistent and is accepted.
+		modes.submit_competition_guess(room, players[1].id, [0, 1, 2, 3])
+		assert players[1].id in rnd.pending
+
+
+# ---------------------------------------------------------------------------
+# Timeout partial-resolve (the turn-timer path)
+# ---------------------------------------------------------------------------
+
+
+class TestTimeoutResolve:
+	def test_resolve_with_partial_submissions_advances(self):
+		room, players = make_room(MODE_COMPETITION, n_players=2)
+		rnd = modes.start_competition_round(room)
+		wrong = tuple((c + 1) % room.config.n_colors for c in rnd.secret)
+		# Only one of two players submits before the timer fires.
+		modes.submit_competition_guess(room, players[0].id, list(wrong))
+		out = modes.resolve_competition_barrier(room)
+		assert out["round_over"] is False
+		assert out["next_guess_no"] == 2
+		assert len(rnd.board(players[0].id)) == 1  # submitter's guess committed
+		assert len(rnd.board(players[1].id)) == 0  # non-submitter skipped this turn
 
 
 # ---------------------------------------------------------------------------

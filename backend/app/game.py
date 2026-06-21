@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import secrets
 from collections import Counter
 
@@ -19,6 +20,20 @@ def generate_secret(length: int = DEFAULT_CODE_LENGTH, n_colors: int = DEFAULT_N
 	if n_colors < 1:
 		raise ValueError(f"n_colors must be >= 1, got {n_colors}")
 	return tuple(secrets.randbelow(n_colors) for _ in range(length))
+
+
+def generate_daily_secret(day_number: int, length: int = DEFAULT_CODE_LENGTH, n_colors: int = DEFAULT_NUM_COLORS) -> tuple[int, ...]:
+	"""Return the deterministic secret for a given day so every client shares it.
+
+	Seeded with `day_number` (not the `secrets` module) so the code is reproducible
+	across processes and players for the same day, but differs day to day.
+	"""
+	if length < 1:
+		raise ValueError(f"length must be >= 1, got {length}")
+	if n_colors < 1:
+		raise ValueError(f"n_colors must be >= 1, got {n_colors}")
+	rng = random.Random(day_number)
+	return tuple(rng.randrange(n_colors) for _ in range(length))
 
 
 def is_valid_guess(guess: object, length: int, n_colors: int) -> bool:
@@ -81,6 +96,18 @@ def score_guess_per_slot(secret: tuple[int, ...], guess: tuple[int, ...]) -> lis
 			result[i] = "absent"
 
 	return result  # type: ignore[return-value]
+
+
+def is_consistent_with_history(guess: tuple[int, ...], history: list[tuple[tuple[int, ...], int, int]]) -> bool:
+	"""True if `guess` could still be the secret given prior (guess, black, white) clues.
+
+	Used for Hard mode: a candidate is consistent only if, were it the secret, every
+	previous guess would have produced exactly the feedback the player already saw.
+	"""
+	for prior_guess, black, white in history:
+		if score_guess(guess, prior_guess) != (black, white):
+			return False
+	return True
 
 
 def is_solved(black: int, length: int) -> bool:
