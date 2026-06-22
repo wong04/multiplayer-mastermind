@@ -73,11 +73,14 @@ socket.onStatus = (status) => {
 	$("status-text").textContent = status;
 };
 
+let attemptingReconnect = false;
+
 socket.onOpen = () => {
 	// On (re)connect, replay a stored session if we have one.
 	const raw = localStorage.getItem(SESSION_KEY);
 	if (raw && !S.playerId) {
 		const sess = JSON.parse(raw);
+		attemptingReconnect = true;
 		socket.send({ type: "reconnect", room_code: sess.roomCode, token: sess.token });
 	}
 };
@@ -85,6 +88,7 @@ socket.onOpen = () => {
 // -- server message handlers ----------------------------------------------
 
 socket.on("room_joined", (m) => {
+	attemptingReconnect = false;
 	S.playerId = m.player_id;
 	S.playerToken = m.player_token;
 	S.roomCode = m.room_code;
@@ -200,7 +204,16 @@ socket.on("game_over", (m) => {
 	showScreen("over");
 });
 
-socket.on("error", (m) => toast(m.message, "error"));
+socket.on("error", (m) => {
+	// A failed auto-reconnect (stale room/session) isn't something the user did —
+	// silently drop the dead session instead of alarming them.
+	if (attemptingReconnect && !S.playerId) {
+		attemptingReconnect = false;
+		clearSession();
+		return;
+	}
+	toast(m.message, "error");
+});
 
 // -- home screen -----------------------------------------------------------
 

@@ -65,7 +65,13 @@ function guessRow(result, codeLength) {
 // Render a player's full guess history into `container`.
 function renderHistory(container, board, codeLength) {
 	container.innerHTML = "";
-	for (const result of board) container.appendChild(guessRow(result, codeLength));
+	let last = null;
+	for (const result of board) {
+		last = guessRow(result, codeLength);
+		container.appendChild(last);
+	}
+	// Phosphor burn-in on the most recent guess.
+	if (last) last.classList.add("row--new");
 	container.scrollTop = container.scrollHeight;
 }
 

@@ -18,6 +18,9 @@
 	--bv-lt:    #3a5c3a;
 	--bv-dk:    #010a01;
 	--shadow:   0 0 24px rgba(51,255,102,0.08);
+	/* Phosphor glow ramp */
+	--glow-1:   0 0 4px rgba(51,255,102,0.55);
+	--glow-2:   0 0 10px rgba(51,255,102,0.35);
 }
 
 /* ---- Reset & base ---- */
@@ -26,26 +29,30 @@
 body {
 	font-family: 'VT323', monospace;
 	font-size: 18px;
-	background: var(--bg);
+	background:
+		radial-gradient(120% 120% at 50% 0%, #0e140e 0%, var(--bg) 55%, #060806 100%);
 	color: var(--text);
 	min-height: 100vh;
 	overflow-x: hidden;
 }
 
-/* CRT scanlines overlay */
+/* CRT scanlines overlay — fine pitch with a faint green tint */
 body::after {
 	content: '';
 	position: fixed;
 	inset: 0;
 	pointer-events: none;
-	z-index: 9999;
-	background: repeating-linear-gradient(
-		0deg,
-		rgba(0,0,0,0.18) 0px,
-		rgba(0,0,0,0.18) 1px,
-		transparent 1px,
-		transparent 3px
-	);
+	z-index: 9000;
+	background:
+		repeating-linear-gradient(
+			0deg,
+			rgba(0,0,0,0.22) 0px,
+			rgba(0,0,0,0.22) 1px,
+			rgba(8,24,12,0.05) 1px,
+			rgba(8,24,12,0.05) 2px,
+			transparent 2px,
+			transparent 3px
+		);
 }
 
 /* Slow CRT flicker */
@@ -58,6 +65,103 @@ body::after {
 	97%      { opacity: 1; }
 }
 body { animation: flicker 8s infinite; }
+
+/* ---- CRT atmosphere overlays (fixed, non-interactive) ---- */
+.crt-vignette,
+.crt-grain,
+.crt-sweep {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+}
+/* Curved-glass darkening + centered phosphor bloom */
+.crt-vignette {
+	z-index: 9100;
+	background:
+		radial-gradient(130% 110% at 50% 50%, transparent 58%, rgba(0,0,0,0.55) 100%),
+		radial-gradient(80% 60% at 50% 45%, rgba(51,255,102,0.06), transparent 70%);
+}
+/* Tube grain — tiled fractal noise, gently drifting */
+.crt-grain {
+	z-index: 9200;
+	opacity: 0.05;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+	background-size: 160px 160px;
+	animation: grain-drift 1.2s steps(4) infinite;
+}
+@keyframes grain-drift {
+	0%   { background-position: 0 0; }
+	25%  { background-position: -32px 12px; }
+	50%  { background-position: 18px -28px; }
+	75%  { background-position: -12px 24px; }
+	100% { background-position: 0 0; }
+}
+/* Slow refresh sweep travelling down the tube */
+.crt-sweep {
+	z-index: 9300;
+	background: linear-gradient(
+		180deg,
+		transparent 0%,
+		rgba(51,255,102,0.05) 46%,
+		rgba(180,255,200,0.10) 50%,
+		rgba(51,255,102,0.05) 54%,
+		transparent 100%
+	);
+	height: 38vh;
+	inset: auto 0 auto 0;
+	top: -38vh;
+	animation: crt-sweep 7s linear infinite;
+}
+@keyframes crt-sweep {
+	0%   { transform: translateY(0); opacity: 0; }
+	8%   { opacity: 1; }
+	92%  { opacity: 1; }
+	100% { transform: translateY(140vh); opacity: 0; }
+}
+
+/* ---- Boot sequence overlay ---- */
+#boot {
+	position: fixed;
+	inset: 0;
+	z-index: 10000;
+	background: radial-gradient(120% 120% at 50% 45%, #0a120c 0%, #050805 70%, #000 100%);
+	display: flex;
+	align-items: flex-start;
+	padding: clamp(20px, 8vh, 90px) clamp(18px, 8vw, 120px);
+	overflow: hidden;
+	transform-origin: center;
+}
+.boot-log {
+	font-family: 'VT323', monospace;
+	font-size: clamp(1rem, 2.4vw, 1.4rem);
+	line-height: 1.45;
+	color: var(--green);
+	text-shadow: var(--glow-1);
+	white-space: pre-wrap;
+	margin: 0;
+}
+/* CRT power-off: collapse to a bright line, then fade — reveals the app beneath */
+.boot--off { animation: crt-off 0.6s cubic-bezier(0.6, 0, 0.4, 1) forwards; }
+@keyframes crt-off {
+	0%   { transform: scaleY(1) scaleX(1);      filter: brightness(1);   opacity: 1; }
+	55%  { transform: scaleY(0.55) scaleX(1);   filter: brightness(1.6); opacity: 1; }
+	78%  { transform: scaleY(0.004) scaleX(1);  filter: brightness(4);   opacity: 1; }
+	82%  { transform: scaleY(0.004) scaleX(0.4);filter: brightness(6);   opacity: 1; }
+	100% { transform: scaleY(0.004) scaleX(0);  filter: brightness(6);   opacity: 0; }
+}
+
+/* Blinking block caret for typed copy */
+.caret {
+	display: inline-block;
+	width: 0.6em;
+	height: 1em;
+	margin-left: 2px;
+	background: var(--green);
+	box-shadow: var(--glow-1);
+	vertical-align: text-bottom;
+	animation: caret-blink 1s step-end infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
 
 /* ---- Top bar ---- */
 .topbar {
@@ -73,8 +177,18 @@ body { animation: flicker 8s infinite; }
 	font-family: 'Press Start 2P', monospace;
 	font-size: 1.2rem;
 	letter-spacing: 2px;
-	text-shadow: 0 0 8px var(--green), 0 0 20px var(--green-dim);
 	color: var(--green);
+	/* RGB misconvergence + phosphor bloom */
+	text-shadow:
+		-1px 0 2px rgba(255,40,40,0.5),
+		 1px 0 2px rgba(40,200,255,0.5),
+		 0 0 8px var(--green),
+		 0 0 20px var(--green-dim);
+	animation: aberrate 5s ease-in-out infinite;
+}
+@keyframes aberrate {
+	0%,100% { text-shadow: -1px 0 2px rgba(255,40,40,0.5), 1px 0 2px rgba(40,200,255,0.5), 0 0 8px var(--green), 0 0 20px var(--green-dim); }
+	50%     { text-shadow: -2px 0 3px rgba(255,40,40,0.6), 2px 0 3px rgba(40,200,255,0.6), 0 0 10px var(--green), 0 0 22px var(--green-dim); }
 }
 .brand span { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
 
@@ -106,11 +220,32 @@ body { animation: flicker 8s infinite; }
 }
 
 .screen { display: none; width: 100%; max-width: 780px; }
-.screen.active { display: block; animation: crt-in 0.15s ease; }
+.screen.active { display: block; animation: crt-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes crt-in {
-	from { opacity: 0; transform: scaleY(0.97); }
+	0%   { opacity: 0; transform: scaleY(0.4); filter: brightness(2.2); }
+	40%  { opacity: 1; transform: scaleY(1.02); filter: brightness(1.4); }
+	100% { opacity: 1; transform: none; filter: none; }
+}
+
+/* Staggered reveal of a card's direct children when its screen powers on */
+.screen.active .card > .card-body > *,
+.screen.active .card > .game-head,
+.screen.active .card > .game-area {
+	opacity: 0;
+	animation: reveal-up 0.4s ease forwards;
+}
+@keyframes reveal-up {
+	from { opacity: 0; transform: translateY(8px); }
 	to   { opacity: 1; transform: none; }
 }
+.screen.active .card > .card-body > *:nth-child(1) { animation-delay: 0.10s; }
+.screen.active .card > .card-body > *:nth-child(2) { animation-delay: 0.16s; }
+.screen.active .card > .card-body > *:nth-child(3) { animation-delay: 0.22s; }
+.screen.active .card > .card-body > *:nth-child(4) { animation-delay: 0.28s; }
+.screen.active .card > .card-body > *:nth-child(5) { animation-delay: 0.34s; }
+.screen.active .card > .card-body > *:nth-child(n+6) { animation-delay: 0.40s; }
+.screen.active .card > .game-head { animation-delay: 0.10s; }
+.screen.active .card > .game-area { animation-delay: 0.22s; }
 
 /* ---- Win98-style beveled card ---- */
 .card {
@@ -325,6 +460,13 @@ input:focus {
 	color: var(--amber);
 	text-shadow: 0 0 12px var(--amber), 0 0 4px #000;
 	letter-spacing: 8px;
+	animation: readout-flicker 4s infinite;
+}
+@keyframes readout-flicker {
+	0%,100% { text-shadow: 0 0 12px var(--amber), 0 0 4px #000; }
+	48%     { text-shadow: 0 0 12px var(--amber), 0 0 4px #000; }
+	49%     { text-shadow: 0 0 6px var(--amber), 0 0 4px #000; opacity: 0.86; }
+	50%     { text-shadow: 0 0 14px var(--amber), 0 0 4px #000; opacity: 1; }
 }
 
 .players {
@@ -483,10 +625,25 @@ input:focus {
 	border-bottom:2px solid var(--bv-lt);
 	color: transparent;
 }
-.peg.slot { cursor: pointer; }
+.peg.slot { cursor: pointer; transition: box-shadow 0.08s ease, transform 0.08s ease; }
+.peg.slot:not(.peg--empty) { animation: peg-insert 0.18s ease; }
 .peg.slot:hover { box-shadow: 0 0 0 2px var(--green); }
-.palette-btn { cursor: pointer; transition: box-shadow 0.08s ease; }
-.palette-btn:hover { box-shadow: 0 0 0 2px var(--green), 0 0 8px var(--green-dim); }
+.peg.slot:active { transform: translateY(1px) scale(0.94); }
+@keyframes peg-insert {
+	0%   { transform: scale(0.7); filter: brightness(2.4); }
+	60%  { transform: scale(1.06); filter: brightness(1.5); }
+	100% { transform: none; filter: none; }
+}
+.palette-btn { cursor: pointer; transition: box-shadow 0.08s ease, transform 0.08s ease; }
+.palette-btn:hover { box-shadow: 0 0 0 2px var(--green), 0 0 8px var(--green-dim); transform: translateY(-1px); }
+.palette-btn:active { transform: translateY(1px) scale(0.94); }
+
+/* Phosphor burn-in on the newest guess row */
+.guess-row.row--new { animation: row-burn 0.5s ease; }
+@keyframes row-burn {
+	0%   { background: rgba(51,255,102,0.22); box-shadow: inset 0 0 18px rgba(51,255,102,0.4); }
+	100% { background: var(--bg-2); box-shadow: none; }
+}
 
 /* Feedback key pegs — single row, Wordle colors */
 .feedback { display: flex; flex-direction: row; gap: 4px; align-items: center; }
@@ -494,6 +651,18 @@ input:focus {
 .key--black { background: #6aaa64; }
 .key--white { background: #c9b458; }
 .key--none  { background: #3a3a3c; border: 1px solid #555; }
+/* Newest row's keys illuminate left-to-right */
+.row--new .key { animation: key-light 0.4s ease backwards; }
+.row--new .key:nth-child(1) { animation-delay: 0.10s; }
+.row--new .key:nth-child(2) { animation-delay: 0.20s; }
+.row--new .key:nth-child(3) { animation-delay: 0.30s; }
+.row--new .key:nth-child(4) { animation-delay: 0.40s; }
+.row--new .key:nth-child(n+5) { animation-delay: 0.50s; }
+@keyframes key-light {
+	0%   { transform: scale(0.4); filter: brightness(3); }
+	60%  { transform: scale(1.25); }
+	100% { transform: none; filter: none; }
+}
 
 /* ---- Guess editor ---- */
 .editor {
@@ -613,6 +782,42 @@ input:focus {
 	font-size: 1rem;
 }
 
+/* ---- Cohesive bloom on floating surfaces ---- */
+input { text-shadow: 0 0 4px rgba(51,255,102,0.35); }
+.modal-card { box-shadow: 0 0 40px rgba(51,255,102,0.12), var(--shadow); }
+.toast { box-shadow: 0 0 18px rgba(51,255,102,0.18); }
+.stats-dist::-webkit-scrollbar,
+.modal-card::-webkit-scrollbar { width: 6px; }
+.stats-dist::-webkit-scrollbar-thumb,
+.modal-card::-webkit-scrollbar-thumb { background: var(--green-dim); }
+
+/* ---- Reduced motion: strip flicker/sweep/reveals, keep everything legible ---- */
+@media (prefers-reduced-motion: reduce) {
+	body,
+	.crt-grain,
+	.crt-sweep,
+	.brand,
+	.room-code,
+	.status-dot--connecting,
+	.turn-timer--low,
+	.screen.active,
+	.peg.slot:not(.peg--empty),
+	.guess-row.row--new,
+	.row--new .key,
+	.caret {
+		animation: none !important;
+	}
+	.crt-sweep { display: none; }
+	/* Make sure staggered-reveal children are visible without their animation */
+	.screen.active .card > .card-body > *,
+	.screen.active .card > .game-head,
+	.screen.active .card > .game-area {
+		opacity: 1 !important;
+		transform: none !important;
+		animation: none !important;
+	}
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 620px) {
 	.split { grid-template-columns: 1fr; }
@@ -621,4 +826,5 @@ input:focus {
 	.brand { font-size: 0.7rem; }
 	h2 { font-size: 0.7rem; }
 	.stats-cells { grid-template-columns: repeat(2, 1fr); }
+	#boot { padding: 24px 18px; }
 }

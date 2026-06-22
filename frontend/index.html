@@ -10,6 +10,16 @@
 	<link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+	<!-- CRT atmosphere overlays (non-interactive) -->
+	<div class="crt-vignette"></div>
+	<div class="crt-grain"></div>
+	<div class="crt-sweep"></div>
+
+	<!-- Boot sequence overlay (covers the app during power-on) -->
+	<div id="boot">
+		<pre id="boot-log" class="boot-log"></pre>
+	</div>
+
 	<header class="topbar">
 		<h1 class="brand">Master<span>mind</span></h1>
 		<div class="status">
@@ -174,6 +184,7 @@
 	<div id="toast" class="toast"></div>
 
 	<script src="js/config.js"></script>
+	<script src="js/fx.js"></script>
 	<script src="js/stats.js"></script>
 	<script src="js/share.js"></script>
 	<script src="js/ws.js"></script>
