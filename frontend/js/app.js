@@ -36,6 +36,8 @@ function showScreen(name) {
 	for (const el of document.querySelectorAll(".screen")) {
 		el.classList.toggle("active", el.id === `screen-${name}`);
 	}
+	// Quiet the CRT refresh sweep during active play so it's not distracting.
+	document.body.classList.toggle("in-game", name === "game");
 }
 
 function isHost() {
