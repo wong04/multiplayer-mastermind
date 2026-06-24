@@ -176,23 +176,43 @@ body.in-game .crt-sweep { display: none; }
 }
 
 .brand {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+}
+
+/* Logo mark: a 2x2 code of the game's own beveled pegs */
+.brand-mark {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 2px;
+	flex: none;
+	filter: drop-shadow(0 0 5px rgba(51,255,102,0.35));
+}
+.brand-mark i {
+	display: block;
+	width: 14px;
+	height: 14px;
+	border-top:  2px solid rgba(255,255,255,0.45);
+	border-left: 2px solid rgba(255,255,255,0.45);
+	border-right: 2px solid rgba(0,0,0,0.6);
+	border-bottom:2px solid rgba(0,0,0,0.6);
+	transition: filter 0.15s ease;
+}
+.brand-mark i:nth-child(1) { background: #ff2222; }
+.brand-mark i:nth-child(2) { background: #0088ff; }
+.brand-mark i:nth-child(3) { background: #33ff66; }
+.brand-mark i:nth-child(4) { background: #ffcc00; }
+.brand:hover .brand-mark i { filter: brightness(1.3); }
+
+.brand-text {
 	font-family: 'Press Start 2P', monospace;
 	font-size: 1.2rem;
-	letter-spacing: 2px;
+	letter-spacing: 1px;
 	color: var(--green);
-	/* RGB misconvergence + phosphor bloom */
-	text-shadow:
-		-1px 0 2px rgba(255,40,40,0.5),
-		 1px 0 2px rgba(40,200,255,0.5),
-		 0 0 8px var(--green),
-		 0 0 20px var(--green-dim);
-	animation: aberrate 5s ease-in-out infinite;
+	text-shadow: 0 0 8px var(--green), 0 0 16px var(--green-dim);
 }
-@keyframes aberrate {
-	0%,100% { text-shadow: -1px 0 2px rgba(255,40,40,0.5), 1px 0 2px rgba(40,200,255,0.5), 0 0 8px var(--green), 0 0 20px var(--green-dim); }
-	50%     { text-shadow: -2px 0 3px rgba(255,40,40,0.6), 2px 0 3px rgba(40,200,255,0.6), 0 0 10px var(--green), 0 0 22px var(--green-dim); }
-}
-.brand span { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
+.brand-text span { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
 
 .status {
 	display: flex;
@@ -825,7 +845,9 @@ input { text-shadow: 0 0 4px rgba(51,255,102,0.35); }
 	.split { grid-template-columns: 1fr; }
 	.config-grid { grid-template-columns: 1fr; }
 	.peg { width: 26px; height: 26px; font-size: 0.75rem; }
-	.brand { font-size: 0.7rem; }
+	.brand { gap: 8px; }
+	.brand-text { font-size: 0.7rem; }
+	.brand-mark i { width: 10px; height: 10px; }
 	h2 { font-size: 0.7rem; }
 	.stats-cells { grid-template-columns: repeat(2, 1fr); }
 	#boot { padding: 24px 18px; }
